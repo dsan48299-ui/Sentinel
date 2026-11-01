@@ -29,7 +29,7 @@ export async function POST(request: NextRequest) {
     const dueDate = typeof body.dueDate === "string" && /^\\d{4}-\\d{2}-\\d{2}$/.test(body.dueDate) ? body.dueDate : null;
     const validDueDate = dueDate && !Number.isNaN(Date.parse(dueDate + "T00:00:00Z"))
       && new Date(dueDate + "T00:00:00Z").toISOString().slice(0, 10) === dueDate;
-    if (!clientName || !Number.isFinite(amount) || amountCents < 1 || amountCents > 100000000 || !validDueDate) {
+    if (!clientName || !Number.isFinite(amount) || Math.abs(amount * 100 - amountCents) > 0.000001 || amountCents < 1 || amountCents > 100000000 || !validDueDate) {
       return NextResponse.json({ error: "Enter a client, a valid amount with up to two decimal places, and a valid due date." }, { status: 400 });
     }
     const db = getSupabaseAdmin();
