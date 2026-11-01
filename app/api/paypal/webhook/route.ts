@@ -8,39 +8,92 @@ export async function POST(request: NextRequest) {
   try {
     const webhookId = process.env.PAYPAL_WEBHOOK_ID;
     if (!webhookId) return NextResponse.json({ error: "Webhook is not configured." }, { status: 503 });
+
     const event = await request.json();
+    if (typeof event?.id !== "string" || typeof event?.event_type !== "string") {
+      return NextResponse.json({ error: "Invalid PayPal event payload." }, { status: 400 });
+    }
+
     const header = (name: string) => request.headers.get(name) || "";
-    const verification = await paypalRequest("/v1/notifications/verify-webhook-signature", "POST", {
+    const transmission = {
       auth_algo: header("paypal-auth-algo"),
       cert_url: header("paypal-cert-url"),
       transmission_id: header("paypal-transmission-id"),
       transmission_sig: header("paypal-transmission-sig"),
       transmission_time: header("paypal-transmission-time"),
+    };
+    if (Object.values(transmission).some(value => !value)) {
+      return NextResponse.json({ error: "Required PayPal signature headers are missing." }, { status: 400 });
+    }
+
+    const verification = await paypalRequest("/v1/notifications/verify-webhook-signature", "POST", {
+      ...transmission,
       webhook_id: webhookId,
       webhook_event: event,
     });
-    if (verification.verification_status !== "SUCCESS") return NextResponse.json({ error: "Invalid webhook signature." }, { status: 401 });
-    const db = getSupabaseAdmin();
-    const eventId = event.id;
-    if (typeof eventId === "string") {
-      const { error: eventError } = await db.from("paypal_webhook_events").upsert({ event_id: eventId, event_type: event.event_type, processed_at: new Date().toISOString() }, { onConflict: "event_id" });
-      if (eventError) throw eventError;
+    if (verification.verification_status !== "SUCCESS") {
+      return NextResponse.json({ error: "Invalid webhook signature." }, { status: 401 });
     }
-    if (event.event_type === "PAYMENT.CAPTURE.COMPLETED") {
-      const orderId = event.resource?.supplementary_data?.related_ids?.order_id;
-      const captureId = event.resource?.id;
-      if (orderId) {
-        const { data: savedOrder } = await db.from("paypal_orders").select("invoice_id").eq("paypal_order_id", orderId).maybeSingle();
-        if (savedOrder?.invoice_id) {
-          await db.from("invoices").update({ status: "PAID", paid_at: new Date().toISOString(), paypal_order_id: orderId, paypal_capture_id: captureId }).eq("id", savedOrder.invoice_id);
-          await db.from("paypal_orders").update({ status: "COMPLETED", paypal_capture_id: captureId }).eq("paypal_order_id", orderId);
+
+    const db = getSupabaseAdmin();
+    const { data: priorEvent, error: priorError } = await db
+      .from("paypal_webhook_events").select("event_id").eq("event_id", event.id).maybeSingle();
+    if (priorError) throw priorError;
+    if (priorEvent) return NextResponse.json({ received: true, duplicate: true });
+
+    const orderId = event.resource?.supplementary_data?.related_ids?.order_id;
+    const captureId = event.resource?.id;
+
+    if (event.event_type === "PAYMENT.CAPTURE.COMPLETED" && orderId && captureId) {
+      const { data: savedOrder, error: orderError } = await db
+        .from("paypal_orders").select("invoice_id").eq("paypal_order_id", orderId).maybeSingle();
+      if (orderError) throw orderError;
+
+      if (savedOrder?.invoice_id) {
+        const { data: invoice, error: invoiceError } = await db
+          .from("invoices").select("id,amount,currency,status").eq("id", savedOrder.invoice_id).maybeSingle();
+        if (invoiceError) throw invoiceError;
+
+        const eventAmount = Number(event.resource?.amount?.value);
+        const eventCurrency = event.resource?.amount?.currency_code;
+        if (!invoice || !Number.isFinite(eventAmount) || eventAmount !== Number(invoice.amount) || eventCurrency !== invoice.currency) {
+          console.error("PayPal webhook amount or currency did not match the saved invoice.", event.id);
+          return NextResponse.json({ error: "Payment requires manual reconciliation." }, { status: 409 });
         }
+
+        const { error: invoiceUpdateError } = await db.from("invoices").update({
+          status: "PAID", paid_at: new Date().toISOString(), paypal_order_id: orderId, paypal_capture_id: captureId,
+        }).eq("id", invoice.id);
+        if (invoiceUpdateError) throw invoiceUpdateError;
+
+        const { error: orderUpdateError } = await db.from("paypal_orders")
+          .update({ status: "COMPLETED", paypal_capture_id: captureId }).eq("paypal_order_id", orderId);
+        if (orderUpdateError) throw orderUpdateError;
       }
     }
-    if (event.event_type === "PAYMENT.CAPTURE.DENIED" || event.event_type === "PAYMENT.CAPTURE.REFUNDED" || event.event_type === "PAYMENT.CAPTURE.REVERSED") {
-      const orderId = event.resource?.supplementary_data?.related_ids?.order_id;
-      if (orderId) await db.from("paypal_orders").update({ status: event.event_type }).eq("paypal_order_id", orderId);
+
+    if (["PAYMENT.CAPTURE.DENIED", "PAYMENT.CAPTURE.REFUNDED", "PAYMENT.CAPTURE.REVERSED"].includes(event.event_type) && orderId) {
+      const { data: savedOrder, error: orderLookupError } = await db
+        .from("paypal_orders").select("invoice_id").eq("paypal_order_id", orderId).maybeSingle();
+      if (orderLookupError) throw orderLookupError;
+
+      const status = event.event_type.split(".").at(-1) || event.event_type;
+      const { error: orderUpdateError } = await db.from("paypal_orders")
+        .update({ status }).eq("paypal_order_id", orderId);
+      if (orderUpdateError) throw orderUpdateError;
+
+      if (savedOrder?.invoice_id && (event.event_type === "PAYMENT.CAPTURE.REFUNDED" || event.event_type === "PAYMENT.CAPTURE.REVERSED")) {
+        const { error: invoiceUpdateError } = await db.from("invoices")
+          .update({ status: "REFUNDED" }).eq("id", savedOrder.invoice_id);
+        if (invoiceUpdateError) throw invoiceUpdateError;
+      }
     }
+
+    const { error: saveEventError } = await db.from("paypal_webhook_events").insert({
+      event_id: event.id, event_type: event.event_type, processed_at: new Date().toISOString(),
+    });
+    if (saveEventError && saveEventError.code !== "23505") throw saveEventError;
+
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("PayPal webhook processing failed", error);
