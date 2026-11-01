@@ -1,8 +1,10 @@
 import { createBrowserClient } from "@supabase/ssr";
 
-export function getSupabaseBrowser() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!url || !key) throw new Error("Supabase URL and anon key are not configured.");
-  return createBrowserClient(url, key);
+export async function getSupabaseBrowser() {
+  const response = await fetch("/api/client-config", { cache: "no-store" });
+  const config = await response.json();
+  if (!response.ok || !config.supabaseUrl || !config.supabaseAnonKey) {
+    throw new Error("Supabase URL and anon key are not configured.");
+  }
+  return createBrowserClient(config.supabaseUrl, config.supabaseAnonKey);
 }
