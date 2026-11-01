@@ -33,12 +33,11 @@ Create a Supabase project. In its SQL Editor, run:
 
 \`supabase/migrations/202610310001_capitalflow_payments.sql\`
 
-Enable Email OTP / magic-link authentication. In Supabase Authentication → URL Configuration, set the deployed app URL as the Site URL and add these allowed redirect URLs:
+Enable Email OTP / magic-link authentication. In Supabase Authentication → URL Configuration, set **Site URL** to `https://capitalflow-ai-flame.vercel.app` and add this exact production redirect URL to **Redirect URLs**:
 
-- \`https://YOUR_DOMAIN/auth/callback\`
-- \`http://localhost:3000/auth/callback\`
+- `https://capitalflow-ai-flame.vercel.app/auth/callback`
 
-Use the exact production domain configured in Vercel.
+For local development only, optionally also add `http://localhost:3000/auth/callback`. The production sign-in page always requests the canonical production callback URL. Do not set the production Site URL to localhost.
 
 ### 2. PayPal Sandbox
 
