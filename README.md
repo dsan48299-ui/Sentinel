@@ -35,7 +35,7 @@ Enable Email OTP / magic-link authentication. Add your deployed app URL and loca
 
 ### 2. PayPal Sandbox
 
-In the PayPal Developer Dashboard, create a REST app in Sandbox and copy its Client ID and Secret. Set the same Client ID in both `PAYPAL_CLIENT_ID` and `NEXT_PUBLIC_PAYPAL_CLIENT_ID`. Keep `PAYPAL_CLIENT_SECRET` server-side only.
+In the PayPal Developer Dashboard, create a REST app in Sandbox and copy its Client ID and Secret. Set the Sandbox Client ID as `NEXT_PAYPAL_CLIENT_ID`. The app serves the browser-safe client ID and Supabase anon configuration through a same-origin config endpoint; keep `PAYPAL_CLIENT_SECRET` and `SUPABASE_SERVICE_ROLE_KEY` server-side only.
 
 Set `PAYPAL_BASE_URL=https://api-m.sandbox.paypal.com`.
 
@@ -54,13 +54,12 @@ Add these to Vercel Project Settings → Environment Variables for Preview and P
 
 | Variable | Purpose |
 |---|---|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase public anon key |
+| `NEXT_SUPABASE_URL` | Supabase project URL |
+| `NEXT_SUPABASE_ANON_KEY` | Supabase public anon key |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase server-only service role key |
-| `PAYPAL_CLIENT_ID` | PayPal Sandbox REST app client ID |
-| `PAYPAL_CLIENT_SECRET` | PayPal Sandbox REST app secret |
-| `NEXT_PUBLIC_PAYPAL_CLIENT_ID` | Same Sandbox client ID for PayPal JS SDK |
-| `PAYPAL_BASE_URL` | Sandbox API URL |
+| `NEXT_PAYPAL_CLIENT_ID` | PayPal Sandbox app client ID |
+| `PAYPAL_CLIENT_SECRET` | PayPal Sandbox app secret |
+| `PAYPAL_BASE_URL` | Optional Sandbox API URL (defaults to Sandbox) |
 | `PAYPAL_WEBHOOK_ID` | PayPal webhook ID |
 
 Never commit real credentials or expose the service role key / PayPal secret with a `NEXT_PUBLIC_` prefix.
