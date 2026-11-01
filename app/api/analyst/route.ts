@@ -45,12 +45,14 @@ export async function POST(request: NextRequest) {
       return acc;
     }, { received: 0, outstanding: 0, overdue: 0, refunded: 0 });
 
-    // Vercel supplies VERCEL_OIDC_TOKEN to deployed functions. A dedicated
-    // AI Gateway key takes precedence when one is explicitly configured.
-    const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
+    // Vercel Functions inject the OIDC token into this request header.
+    // Local/Build environments may instead expose VERCEL_OIDC_TOKEN.
+    const token = process.env.AI_GATEWAY_API_KEY?.trim()
+      || request.headers.get("x-vercel-oidc-token")?.trim()
+      || process.env.VERCEL_OIDC_TOKEN?.trim();
     if (!token) {
       return NextResponse.json({
-        error: "The AI service is not available yet. Enable Vercel AI Gateway for this project or configure AI_GATEWAY_API_KEY.",
+        error: "AI Gateway authentication is unavailable. Enable OIDC for this Vercel project or configure AI_GATEWAY_API_KEY in project environment variables.",
       }, { status: 503 });
     }
 
