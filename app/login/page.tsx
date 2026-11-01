@@ -3,6 +3,8 @@
 import { FormEvent, useEffect, useState } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase-browser";
 
+const PRODUCTION_APP_URL = "https://capitalflow-ai-flame.vercel.app";
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [message, setMessage] = useState("");
@@ -19,12 +21,14 @@ export default function LoginPage() {
     setBusy(true); setMessage("");
     try {
       const supabase = await getSupabaseBrowser();
+      const isLocalDevelopment = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+      const appUrl = isLocalDevelopment ? window.location.origin : PRODUCTION_APP_URL;
       const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: window.location.origin + "/auth/callback" },
+        email: email.trim(),
+        options: { emailRedirectTo: appUrl + "/auth/callback" },
       });
       if (error) throw error;
-      setMessage("Check your email for a secure sign-in link. The link expires, so open the newest email.");
+      setMessage("Check your email for a new secure sign-in link. Open the newest email; older links may have an outdated redirect.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not send sign-in link.");
     } finally { setBusy(false); }
