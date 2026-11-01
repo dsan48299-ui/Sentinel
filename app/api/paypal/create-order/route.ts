@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
         reference_id: invoice.id,
         custom_id: invoice.id,
         invoice_id: invoice.invoice_number,
-        description: \`Invoice \${invoice.invoice_number} — \${invoice.client_name}\`,
+        description: "Invoice " + invoice.invoice_number + " - " + invoice.client_name,
         amount: { currency_code: invoice.currency, value: Number(invoice.amount).toFixed(2) },
       }],
       payment_source: { paypal: { experience_context: { user_action: "PAY_NOW", shipping_preference: "NO_SHIPPING" } } },

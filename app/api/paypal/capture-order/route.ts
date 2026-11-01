@@ -61,14 +61,14 @@ export async function POST(request: NextRequest) {
     let captured: any;
     try {
       captured = await paypalRequest(
-        \`/v2/checkout/orders/\${encodeURIComponent(orderId)}/capture\`,
+        "/v2/checkout/orders/" + encodeURIComponent(orderId) + "/capture",
         "POST",
         {},
         randomUUID(),
       );
     } catch (captureError) {
       const existing = await paypalRequest(
-        \`/v2/checkout/orders/\${encodeURIComponent(orderId)}\`,
+        "/v2/checkout/orders/" + encodeURIComponent(orderId),
         "GET",
       ).catch(() => null);
       if (existing?.status !== "COMPLETED") throw captureError;
@@ -78,22 +78,22 @@ export async function POST(request: NextRequest) {
     const unit = captured.purchase_units?.find((purchaseUnit: any) =>
       purchaseUnit?.custom_id === invoice.id || purchaseUnit?.reference_id === invoice.id
     );
-    const capture = unit?.payments?.captures?.find((item: any) => item?.status === "COMPLETED");
-    if (captured.status !== "COMPLETED" || !capture || typeof capture.id !== "string") {
+    const captureRecord = unit?.payments?.captures?.find((item: any) => item?.status === "COMPLETED");
+    if (captured.status !== "COMPLETED" || !captureRecord || typeof captureRecord.id !== "string") {
       return NextResponse.json({
         error: "PayPal has not confirmed a completed capture.",
         status: captured.status || "UNKNOWN",
       }, { status: 409 });
     }
 
-    const capturedCents = toCents(capture.amount?.value);
+    const capturedCents = toCents(captureRecord.amount?.value);
     const invoiceCents = toCents(invoice.amount);
     if (
       !unit ||
       unit.custom_id !== invoice.id ||
       capturedCents === null ||
       capturedCents !== invoiceCents ||
-      capture.amount?.currency_code !== invoice.currency
+      captureRecord.amount?.currency_code !== invoice.currency
     ) {
       console.error("Captured PayPal amount/reference did not match invoice", orderId);
       return NextResponse.json({ error: "Captured payment did not match the invoice. Manual review required." }, { status: 409 });
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
         status: "PAID",
         paid_at: new Date().toISOString(),
         paypal_order_id: orderId,
-        paypal_capture_id: capture.id,
+        paypal_capture_id: captureRecord.id,
       })
       .eq("id", invoice.id)
       .eq("owner_id", user.id)
@@ -120,18 +120,18 @@ export async function POST(request: NextRequest) {
         .eq("owner_id", user.id)
         .maybeSingle();
       if (currentError) throw currentError;
-      if (currentInvoice?.status !== "PAID" || currentInvoice.paypal_capture_id !== capture.id) {
+      if (currentInvoice?.status !== "PAID" || currentInvoice.paypal_capture_id !== captureRecord.id) {
         return NextResponse.json({ error: "Payment was captured but the invoice needs manual reconciliation." }, { status: 409 });
       }
     }
 
     const { error: savedOrderUpdateError } = await db.from("paypal_orders")
-      .update({ status: "COMPLETED", paypal_capture_id: capture.id })
+      .update({ status: "COMPLETED", paypal_capture_id: captureRecord.id })
       .eq("paypal_order_id", orderId)
       .eq("owner_id", user.id);
     if (savedOrderUpdateError) throw savedOrderUpdateError;
 
-    return NextResponse.json({ status: "COMPLETED", captureId: capture.id });
+    return NextResponse.json({ status: "COMPLETED", captureId: captureRecord.id });
   } catch (error) {
     console.error("PayPal capture failed", error);
     return NextResponse.json({ error: "PayPal could not finish this payment request. Refresh the invoice and check its current status before retrying." }, { status: 503 });

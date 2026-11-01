@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: \`Bearer \${token}\`,
+        Authorization: "Bearer " + token,
         "Content-Type": "application/json",
         "X-Vercel-AI-App-Name": "CapitalFlow AI",
         "X-Vercel-AI-App-Url": "https://capitalflow-ai-flame.vercel.app",
