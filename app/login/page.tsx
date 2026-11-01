@@ -11,7 +11,7 @@ export default function LoginPage() {
     event.preventDefault();
     setBusy(true); setMessage("");
     try {
-      const supabase = getSupabaseBrowser();
+      const supabase = await getSupabaseBrowser();
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
