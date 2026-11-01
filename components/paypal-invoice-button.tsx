@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PayPalButtons, PayPalScriptProvider } from "@paypal/react-paypal-js";
 
 type Props = { invoiceId: string; onPaid: () => void };
 
 export default function PayPalInvoiceButton({ invoiceId, onPaid }: Props) {
   const [error, setError] = useState("");
-  const clientId = process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID;
+  const [clientId, setClientId] = useState("");
+  const [configLoaded, setConfigLoaded] = useState(false);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/client-config", { cache: "no-store" })
+      .then(response => response.json())
+      .then(config => { if (active) setClientId(config.paypalClientId || ""); })
+      .catch(() => { if (active) setClientId(""); })
+      .finally(() => { if (active) setConfigLoaded(true); });
+    return () => { active = false; };
+  }, []);
+  if (!configLoaded) return <span className="payment-setup">Loading checkout…</span>;
   if (!clientId) return <span className="payment-setup">PayPal setup required</span>;
   return <div className="paypal-button-wrap">
     <PayPalScriptProvider options={{ clientId, currency: "USD", intent: "capture" }}>
