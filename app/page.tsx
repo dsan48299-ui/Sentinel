@@ -79,6 +79,7 @@ export default function Home() {
   }
 
   const prompts = ["What invoices are overdue?", "How much cash is outstanding?", "What should I follow up on first?"];
+  const today = new Date().toISOString().slice(0, 10);
 
   return <main className="shell">
     <aside className="sidebar">
@@ -102,7 +103,7 @@ export default function Home() {
         </section>
         <section className="panel invoices-panel" id="invoices"><div className="panel-heading"><div><h2>Invoices</h2><p>Amounts are retrieved server-side before checkout.</p></div><button className="text-button" onClick={() => setShowCreate(true)} disabled={signedOut}>＋ New invoice</button></div>
           {loading ? <div className="empty-state">Loading your invoices…</div> : invoices.length === 0 ? <div className="empty-state">No invoices yet. Create your first invoice to begin collecting payments.</div> :
-          <div className="table-wrap"><table><thead><tr><th>INVOICE</th><th>CLIENT</th><th>DUE DATE</th><th>AMOUNT</th><th>STATUS</th><th>PAYMENT</th></tr></thead><tbody>{invoices.map(inv => <tr key={inv.id}><td className="invoice-id">{inv.invoice_number}</td><td>{inv.client_name}</td><td>{dateLabel(inv.due_date)}</td><td className="amount">{money(Number(inv.amount))}</td><td><span className={"status " + inv.status.toLowerCase()}><i/>{inv.status}</span></td><td>{inv.status === "PENDING" ? <span id="payments"><PayPalInvoiceButton invoiceId={inv.id} onPaid={loadInvoices}/></span> : inv.status === "PAID" ? <span className="confirmed-payment">✓ Captured</span> : inv.status === "REFUNDED" ? <span className="status refunded">REFUNDED</span> : "—"}</td></tr>)}</tbody></table></div>}
+          <div className="table-wrap"><table><thead><tr><th>INVOICE</th><th>CLIENT</th><th>DUE DATE</th><th>AMOUNT</th><th>STATUS</th><th>PAYMENT</th></tr></thead><tbody>{invoices.map(inv => <tr key={inv.id}><td className="invoice-id">{inv.invoice_number}</td><td>{inv.client_name}</td><td>{dateLabel(inv.due_date)}</td><td className="amount">{money(Number(inv.amount))}</td><td><span className={"status " + (inv.status === "PENDING" && inv.due_date < today ? "overdue" : inv.status.toLowerCase())}><i/>{inv.status === "PENDING" && inv.due_date < today ? "OVERDUE" : inv.status}</span></td><td>{inv.status === "PENDING" ? <span id="payments"><PayPalInvoiceButton invoiceId={inv.id} onPaid={loadInvoices}/></span> : inv.status === "PAID" ? <span className="confirmed-payment">✓ Captured</span> : inv.status === "REFUNDED" ? <span className="status refunded">REFUNDED</span> : "—"}</td></tr>)}</tbody></table></div>}
         </section>
         <section className="panel analyst-panel" id="analyst">
           <div className="analyst-intro"><div className="analyst-icon">✦</div><div><div className="ai-label">CAPITALFLOW AI ANALYST</div><h2>Ask your financial operations analyst.</h2><p>Get answers grounded in your latest 100 invoices, verified payment statuses, and receivables.</p></div></div>
