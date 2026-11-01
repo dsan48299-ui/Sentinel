@@ -11,7 +11,10 @@
   "dependencies": {
     "next": "^15.5.6",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.76.1",
+    "@paypal/react-paypal-js": "^8.8.3"
   },
   "devDependencies": {
     "@types/node": "^22.18.6",
