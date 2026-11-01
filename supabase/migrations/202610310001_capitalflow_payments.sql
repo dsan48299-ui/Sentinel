@@ -33,6 +33,14 @@ create table if not exists public.paypal_webhook_events (
   processed_at timestamptz not null default now()
 );
 
+-- Supports account-scoped invoice list queries and the payment-order lookups.
+create index if not exists invoices_owner_created_at_idx
+  on public.invoices (owner_id, created_at desc);
+create index if not exists paypal_orders_owner_id_idx
+  on public.paypal_orders (owner_id);
+create index if not exists paypal_orders_invoice_id_idx
+  on public.paypal_orders (invoice_id);
+
 alter table public.invoices enable row level security;
 alter table public.paypal_orders enable row level security;
 alter table public.paypal_webhook_events enable row level security;

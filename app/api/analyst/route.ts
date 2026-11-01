@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const question = typeof body.question === "string" ? body.question.trim().slice(0, 700) : "";
+    const question = typeof body?.question === "string" ? body.question.trim().slice(0, 700) : "";
     if (question.length < 3) return NextResponse.json({ error: "Ask a question about your invoices or cash flow." }, { status: 400 });
 
     const db = getSupabaseAdmin();
@@ -45,10 +45,12 @@ export async function POST(request: NextRequest) {
       return acc;
     }, { received: 0, outstanding: 0, overdue: 0, refunded: 0 });
 
-    const token = request.headers.get("x-vercel-oidc-token") || process.env.AI_GATEWAY_API_KEY;
+    // Vercel supplies VERCEL_OIDC_TOKEN to deployed functions. A dedicated
+    // AI Gateway key takes precedence when one is explicitly configured.
+    const token = process.env.AI_GATEWAY_API_KEY || process.env.VERCEL_OIDC_TOKEN;
     if (!token) {
       return NextResponse.json({
-        error: "The AI service is not available yet. Enable Vercel AI Gateway for this project, or add AI_GATEWAY_API_KEY for local development.",
+        error: "The AI service is not available yet. Enable Vercel AI Gateway for this project or configure AI_GATEWAY_API_KEY.",
       }, { status: 503 });
     }
 
@@ -62,16 +64,17 @@ export async function POST(request: NextRequest) {
       createdAt: invoice.created_at,
     }));
 
+    const model = process.env.CAPITALFLOW_AI_MODEL?.trim() || "openai/gpt-5.5";
     const response = await fetch("https://ai-gateway.vercel.sh/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: \`Bearer \${token}\`,
         "Content-Type": "application/json",
         "X-Vercel-AI-App-Name": "CapitalFlow AI",
         "X-Vercel-AI-App-Url": "https://capitalflow-ai-flame.vercel.app",
       },
       body: JSON.stringify({
-        model: process.env.CAPITALFLOW_AI_MODEL || "openai/gpt-5.5",
+        model,
         temperature: 0.2,
         max_tokens: 650,
         messages: [
@@ -97,6 +100,7 @@ export async function POST(request: NextRequest) {
         ],
       }),
       cache: "no-store",
+      signal: AbortSignal.timeout(25_000),
     });
 
     const result = await response.json().catch(() => ({}));
@@ -111,7 +115,10 @@ export async function POST(request: NextRequest) {
       : Array.isArray(answer) ? answer.map((part: { text?: string }) => part?.text || "").join("\n") : "";
     if (!text.trim()) return NextResponse.json({ error: "The analyst returned an empty response. Please try again." }, { status: 502 });
 
-    return NextResponse.json({ answer: text.trim(), model: result?.model || process.env.CAPITALFLOW_AI_MODEL || "openai/gpt-5.5" });
+    return NextResponse.json(
+      { answer: text.trim(), model: result?.model || model },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     console.error("CapitalFlow AI analyst failed:", error);
     return NextResponse.json({ error: "Could not analyze your workspace right now." }, { status: 503 });

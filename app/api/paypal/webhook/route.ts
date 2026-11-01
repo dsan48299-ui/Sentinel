@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
         const eventAmount = Number(event.resource?.amount?.value);
         const eventCurrency = event.resource?.amount?.currency_code;
-        if (!invoice || !Number.isFinite(eventAmount) || eventAmount !== Number(invoice.amount) || eventCurrency !== invoice.currency) {
+        if (!invoice || !Number.isFinite(eventAmount) || Math.round(eventAmount * 100) !== Math.round(Number(invoice.amount) * 100) || eventCurrency !== invoice.currency) {
           console.error("PayPal webhook amount or currency did not match the saved invoice.", event.id);
           return NextResponse.json({ error: "Payment requires manual reconciliation." }, { status: 409 });
         }
@@ -77,16 +77,32 @@ export async function POST(request: NextRequest) {
         .from("paypal_orders").select("invoice_id").eq("paypal_order_id", orderId).maybeSingle();
       if (orderLookupError) throw orderLookupError;
 
-      const status = event.event_type.split(".").at(-1) || event.event_type;
-      const { error: orderUpdateError } = await db.from("paypal_orders")
-        .update({ status }).eq("paypal_order_id", orderId);
-      if (orderUpdateError) throw orderUpdateError;
-
-      if (savedOrder?.invoice_id && (event.event_type === "PAYMENT.CAPTURE.REFUNDED" || event.event_type === "PAYMENT.CAPTURE.REVERSED")) {
+      let orderStatus = event.event_type.split(".").at(-1) || event.event_type;
+      if (savedOrder?.invoice_id && event.event_type === "PAYMENT.CAPTURE.REFUNDED") {
+        const { data: invoice, error: invoiceError } = await db.from("invoices")
+          .select("id,amount").eq("id", savedOrder.invoice_id).maybeSingle();
+        if (invoiceError) throw invoiceError;
+        const refundedAmount = Number(event.resource?.amount?.value);
+        const invoiceAmount = Number(invoice?.amount);
+        // A partial refund must not make the whole invoice appear fully refunded.
+        orderStatus = Number.isFinite(refundedAmount) && refundedAmount >= invoiceAmount
+          ? "REFUNDED"
+          : "PARTIALLY_REFUNDED";
+        if (orderStatus === "REFUNDED" && invoice) {
+          const { error: invoiceUpdateError } = await db.from("invoices")
+            .update({ status: "REFUNDED" }).eq("id", invoice.id);
+          if (invoiceUpdateError) throw invoiceUpdateError;
+        }
+      } else if (savedOrder?.invoice_id && event.event_type === "PAYMENT.CAPTURE.REVERSED") {
         const { error: invoiceUpdateError } = await db.from("invoices")
           .update({ status: "REFUNDED" }).eq("id", savedOrder.invoice_id);
         if (invoiceUpdateError) throw invoiceUpdateError;
+        orderStatus = "REVERSED";
       }
+
+      const { error: orderUpdateError } = await db.from("paypal_orders")
+        .update({ status: orderStatus }).eq("paypal_order_id", orderId);
+      if (orderUpdateError) throw orderUpdateError;
     }
 
     const { error: saveEventError } = await db.from("paypal_webhook_events").insert({
