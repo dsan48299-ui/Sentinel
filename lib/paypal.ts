@@ -8,7 +8,7 @@ export async function paypalAccessToken() {
   const id = process.env.NEXT_PAYPAL_CLIENT_ID;
   const secret = process.env.PAYPAL_CLIENT_SECRET;
   if (!id || !secret) throw new Error("PayPal is not configured. Add NEXT_PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET.");
-  const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
+  const response = await fetch(baseUrl + "/v1/oauth2/token", {
     method: "POST",
     headers: {
       Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`,
@@ -16,6 +16,7 @@ export async function paypalAccessToken() {
     },
     body: "grant_type=client_credentials",
     cache: "no-store",
+    signal: AbortSignal.timeout(12_000),
   });
   const data = await response.json();
   if (!response.ok || !data.access_token) throw new Error("PayPal authentication failed.");
@@ -24,7 +25,7 @@ export async function paypalAccessToken() {
 
 export async function paypalRequest(path: string, method: string, body?: unknown, requestId?: string) {
   const token = await paypalAccessToken();
-  const response = await fetch(`${baseUrl}${path}`, {
+  const response = await fetch(baseUrl + path, {
     method,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -34,6 +35,7 @@ export async function paypalRequest(path: string, method: string, body?: unknown
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
     cache: "no-store",
+    signal: AbortSignal.timeout(15_000),
   });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
