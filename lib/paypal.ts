@@ -1,11 +1,11 @@
 const baseUrl = (process.env.PAYPAL_BASE_URL || "https://api-m.sandbox.paypal.com").replace(/\/$/, "");
 
 export function paypalConfigured() {
-  return Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
+  return Boolean(process.env.NEXT_PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET);
 }
 
 export async function paypalAccessToken() {
-  const id = process.env.PAYPAL_CLIENT_ID;
+  const id = process.env.NEXT_PAYPAL_CLIENT_ID;
   const secret = process.env.PAYPAL_CLIENT_SECRET;
   if (!id || !secret) throw new Error("PayPal is not configured. Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET.");
   const response = await fetch(`${baseUrl}/v1/oauth2/token`, {
